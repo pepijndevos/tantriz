@@ -1,0 +1,7 @@
+# Local dev environment
+.venv/
+boxes.py/
+
+# Python
+__pycache__/
+*.pyc

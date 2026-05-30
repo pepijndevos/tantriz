@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Generate hex tile box PDFs for Z-scale Tantrix layout modules.
 
-Produces three separate PDF files for independent laser-cutting orders:
-  hex_top.pdf    — Hexagonal top panel (×1 per tile)
-  wall_blind.pdf — Blind side wall    (×3 per tile)
-  wall_rail.pdf  — Rail side wall     (×3 per tile)
+Produces two separate PDF files for independent laser-cutting orders:
+  hex_top.pdf   — Hexagonal top panel (×1 per tile)
+  wall_rail.pdf — Universal chiral rail wall (one part; order ×6 per tile)
 
 Usage: python hex_tile_box.py [burn_mm]
 """
@@ -31,13 +30,25 @@ R_C3 = 195.0             # mm Märklin 8591 curve radius
 R_C4 = 220.0             # mm Märklin 8590 curve radius
 
 # ── Rail panel hardware ──────────────────────────────
-DOWEL_CUT_D = 3.9        # mm  (ream to 4.0 after cutting)
+DOWEL_CUT_D = 3.7        # mm undersized cut; ream to 4.0 (H7) for a slip fit
 DOWEL_X_INSET = 10.0     # mm from each end of panel
 DOWEL_HEIGHT = 25.0      # mm from bottom edge
 CLAMP_D = 3.5            # mm M3 clearance
 CLAMP_HEIGHT = 25.0      # mm from bottom edge
 NOTCH_W = 15.0           # mm cable notch width
 NOTCH_H = 8.0            # mm cable notch height
+
+# ── Track registration brackets ──────────────────────
+TRACK_BASE_W = 11.8      # mm Märklin Z track base width (verify by caliper)
+BRACKET_FINGER = 13.0    # mm rail-edge tab width
+BRACKET_SPACE = 12.0     # mm rail-edge notch width (receives the track base)
+NIB_W = 2.0              # mm rail-catch nib width
+NIB_H = 1.0              # mm rail-catch nib height (protrudes above deck)
+# On a hex edge the bracket joint yields 5 tabs (indices 0..4) at rel-midpoint
+# -50/-25/0/+25/+50 mm; the two rail bases drop into the notches at ±12.5.
+# Nibs sit on the notch-facing corner(s) of the three center tabs to catch the
+# base edges (≈±6.5 inner, ±18.5 outer).  'l'=left corner, 'r'=right, 'both'.
+NIB_TABS = {1: 'r', 2: 'both', 3: 'l'}
 
 # ── Laser ────────────────────────────────────────────
 BURN = 0.1               # mm default kerf compensation
@@ -100,6 +111,74 @@ def arc_specs():
     return arcs
 
 
+def straight_specs():
+    """Return straight double-track descriptors: (entry_x, entry_y, heading, length).
+
+    Connects opposite faces (0,3), (1,4), (2,5) with the ±12.5 mm parallel pair.
+    Each rail runs parallel to the face-to-face diameter, offset by C3/C4 along the
+    face tangent, so it lands at the matching ±12.5 mm point on the opposite face.
+    """
+    specs = []
+    length = 2 * APOTHEM            # face midpoint to opposite face midpoint
+    for fa in (0, 1, 2):
+        mx, my = face_midpoint(fa)
+        tx, ty = face_tangent(fa)
+        for d in (C3_OFFSET, C4_OFFSET):
+            specs.append((mx + d * tx, my + d * ty, inward_heading(fa), length))
+    return specs
+
+
+# ════════════════════════════════════════════════════════
+#  Custom edge: finger joint with rail-catch nibs
+# ════════════════════════════════════════════════════════
+
+class CatchFingerEdge(edges.FingerJointEdge):
+    """Finger-joint edge with small rail-catch nibs on selected fingers' corners.
+
+    Used only on a wall's top edge.  Keeps every structural finger flush (so the
+    joint into the hex top is unchanged) and adds a NIB_W×NIB_H bump above the deck
+    on the notch-facing corner(s) of the fingers named in NIB_TABS, catching the
+    track base laterally.  The bump is the same kind of polyline excursion as the
+    cable notch, anchored to the auto-generated tab so it stays in sync.
+    """
+
+    def __call__(self, length, **kw):
+        self._fi = 0
+        super().__call__(length, **kw)
+
+    def draw_finger(self, f, h, style, positive=True, firsthalf=True):
+        side = NIB_TABS.get(self._fi) if positive else None
+        self._fi += 1
+        if side is None or style != "rectangular":
+            return super().draw_finger(f, h, style, positive, firsthalf)
+        w, nh = NIB_W, NIB_H
+        bump = [-90, nh, 90, w, 90, nh, -90]   # outward NIB_H, across NIB_W, back in
+        if side == 'l':
+            mid = [0, *bump, f - w]
+        elif side == 'r':
+            mid = [f - w, *bump, 0]
+        else:  # 'both'
+            mid = [0, *bump, f - 2 * w, *bump, 0]
+        self.polyline(0, -90, h, 90, *mid, 90, h, -90)
+
+
+def register_bracket_edges(box):
+    """Register the bracket finger-joint edges on *box*.
+
+    'j' — wall top edge (CatchFingerEdge, with rail-catch nibs).
+    'J' — hex-top counterpart.
+    Both share the same wider spacing (finger/space → period 25 mm, odd count)
+    so the notches land on the ±12.5 mm rail centers and the two edges mate.
+    """
+    s = copy.deepcopy(box.edges["f"].settings)
+    s.setValues(box.thickness, relative=False,
+                finger=BRACKET_FINGER, space=BRACKET_SPACE, surroundingspaces=1)
+    s.edgeObjects(box, chars="jJ")
+    nibbed = CatchFingerEdge(box, s)
+    nibbed.char = 'j'
+    box.addPart(nibbed)
+
+
 # ════════════════════════════════════════════════════════
 #  Generator: hex_top.svg
 # ════════════════════════════════════════════════════════
@@ -112,18 +191,26 @@ class HexTop(Boxes):
         self.addSettingsArgs(edges.FingerJointSettings, surroundingspaces=1)
 
     def render(self):
+        register_bracket_edges(self)
         self.regularPolygonWall(
-            corners=6, r=INNER_R, edges='F',
+            corners=6, r=INNER_R, edges='J',
             callback=[self._engrave], move="right")
 
     def _engrave(self):
         self.ctx.stroke()
         self.set_source_color(Color.RED)
 
+        # Curved tracks (face pairs 0/2, 0/4, 2/4)
         for ex, ey, hdg, turn, r in arc_specs():
             with self.saved_context():
                 self.moveTo(ex, ey, hdg)
                 self.corner(turn, r)
+
+        # Straight tracks across opposite faces (0-3, 1-4, 2-5)
+        for ex, ey, hdg, length in straight_specs():
+            with self.saved_context():
+                self.moveTo(ex, ey, hdg)
+                self.edge(length)
 
         # Center cross (5 mm arms)
         for a in (0, 90, 180, 270):
@@ -135,11 +222,17 @@ class HexTop(Boxes):
 
 
 # ════════════════════════════════════════════════════════
-#  Generator: wall_blind.svg
+#  Generator: wall_rail.svg  (one universal chiral wall ×6)
 # ════════════════════════════════════════════════════════
 
-class WallBlind(Boxes):
-    """Blind side wall — stepped profile for corner finger joints."""
+class WallRail(Boxes):
+    """Universal chiral rail wall (one part; order ×6 per tile).
+
+    A single identical part: a flat 'g' finger edge on the right vertical and a
+    stepped 'G' slot on the left, so fingers always meet slots around the hex
+    ring (no separate male/female variants).  Carries dowel/clamp holes, a cable
+    notch in the bottom edge, and the bracket top edge ('j') with rail-catch nibs.
+    """
 
     def __init__(self):
         Boxes.__init__(self)
@@ -150,55 +243,28 @@ class WallBlind(Boxes):
         _, _, side = self.regularPolygon(6, radius=INNER_R)
         h = H_WALL
 
-        # Corner finger joints at 60° for hexagonal inter-wall connections
+        # 60° corner finger joints (g flat / G stepped) for the hexagonal ring
         fjs = copy.deepcopy(self.edges["f"].settings)
         fjs.setValues(self.thickness, angle=CORNER_ANGLE)
         fjs.edgeObjects(self, chars="gGH")
 
-        # Stepped profile: tabs extend on both vertical sides
-        # (mates with adjacent flat/rail panels' 'g' finger edges)
-        borders = [
-            side, 90,  0, -90,  t, 90,  h, 90,  t, -90,  0, 90,
-            side, 90,  0, -90,  t, 90,  h, 90,  t, -90,  0, 90,
-        ]
-        self.polygonWall(borders, edge='eeeGeefeeGee',
-                         correct_corners=False, move="right")
+        # Bracket top edge: 'j' (CatchFingerEdge) + 'J' counterpart
+        register_bracket_edges(self)
 
-
-# ════════════════════════════════════════════════════════
-#  Generator: wall_rail.svg
-# ════════════════════════════════════════════════════════
-
-class WallRail(Boxes):
-    """Rail side wall — flat profile, dowel holes, clamp hole, cable notch."""
-
-    def __init__(self):
-        Boxes.__init__(self)
-        self.addSettingsArgs(edges.FingerJointSettings, surroundingspaces=1)
-
-    def render(self):
-        _, _, side = self.regularPolygon(6, radius=INNER_R)
-        h = H_WALL
-
-        # Corner finger joints at 60°
-        fjs = copy.deepcopy(self.edges["f"].settings)
-        fjs.setValues(self.thickness, angle=CORNER_ANGLE)
-        fjs.edgeObjects(self, chars="gGH")
-
-        # Flat profile with cable notch cut into bottom edge
         gap = side / 2 - NOTCH_W / 2
         borders = [
             # Bottom edge with centered cable notch (recessed into panel)
             gap, 90,  NOTCH_H, -90,  NOTCH_W, -90,  NOTCH_H, 90,  gap, 90,
             # Right side (flat, 'g' finger joint)
             0, 0,  h, 0,  0, 90,
-            # Top edge ('f' finger joint into hex top)
+            # Top edge (bracket 'j' into hex top, with rail-catch nibs)
             side, 90,
-            # Left side (flat, 'g' finger joint)
-            0, 0,  h, 0,  0, 90,
+            # Left side (stepped, 'G' counterpart slot)
+            0, -90,  t, 90,  h, 90,  t, -90,  0, 90,
         ]
 
-        self.polygonWall(borders, edge='eeeeeegefege',
+        # One wall (order ×6 per tile)
+        self.polygonWall(borders, edge='eeeeeegejeeGee',
                          correct_corners=False,
                          callback=[self._add_holes], move="right")
 
@@ -241,7 +307,6 @@ def main():
     out = Path('.')
     print(f'Generating hex tile box PDFs (burn={burn} mm):')
     generate(HexTop, out / 'hex_top.pdf', burn)
-    generate(WallBlind, out / 'wall_blind.pdf', burn)
     generate(WallRail, out / 'wall_rail.pdf', burn)
     print('Done.')
 
