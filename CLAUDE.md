@@ -41,10 +41,11 @@ PDF output requires two external tools on PATH (macOS: `brew install ghostscript
 ## Running
 
 ```sh
-.venv/bin/python hex_tile_box.py [burn_mm]
+.venv/bin/python hex_tile_box.py [burn_mm] [format]
 ```
 
-Writes `hex_top.pdf`, `wall_blind.pdf`, `wall_rail.pdf` to the current directory.
+`format` defaults to `pdf`; pass `dxf` (or `svg`, etc.) for other outputs.
+Writes `hex_top.<fmt>` and `wall_rail.<fmt>` to the current directory.
 
 ## Geometry notes
 
@@ -72,6 +73,11 @@ Three finger-joint kinds, all derived from the default `FingerJointSettings`:
   notches land exactly on the `±12.5 mm` rail centers. The wall's `j` edge is a
   `CatchFingerEdge` that adds `NIB_W×NIB_H` rail-catch nibs on the notch-facing corners of
   the 3 center tabs (`NIB_TABS`), catching each track base at its edges (≈±6.5, ±18.5 mm).
+  **Burn/kerf note:** `BRACKET_SPACE` is `TRACK_BASE_W + 2×burn` (12.0, not 11.8) because
+  boxes.py's `corner()` arcs bake burn into the DXF geometry. On the hex-top `J` edge the
+  raised deck portion is drawn at nominal (`BRACKET_SPACE`); after laser cutting it shrinks
+  by `2×kerf` → physical deck = 11.8 mm = track base width. Do not set `BRACKET_SPACE`
+  equal to `TRACK_BASE_W` — that produces a 11.6 mm physical deck (too narrow).
 - Tweak the catch via `NIB_W`, `NIB_H`, `NIB_TABS` (empty map ⇒ flush).
 
 ## Conventions

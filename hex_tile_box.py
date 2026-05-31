@@ -40,14 +40,14 @@ NOTCH_H = 8.0            # mm cable notch height
 
 # ── Track registration brackets ──────────────────────
 TRACK_BASE_W = 11.8      # mm Märklin Z track base width (verify by caliper)
-BRACKET_FINGER = 13.2    # mm rail-edge tab width (25.0 − TRACK_BASE_W)
-BRACKET_SPACE = 11.8     # mm rail-edge notch width (= TRACK_BASE_W)
+BRACKET_FINGER = 13.0    # mm rail-edge tab width (25.0 − BRACKET_SPACE)
+BRACKET_SPACE = 12.0     # mm rail-edge notch width (TRACK_BASE_W + 2×burn)
 NIB_W = 2.0              # mm rail-catch nib width
 NIB_H = 1.0              # mm rail-catch nib height (protrudes above deck)
 # On a hex edge the bracket joint yields 5 tabs (indices 0..4) at rel-midpoint
 # -50/-25/0/+25/+50 mm; the two rail bases drop into the notches at ±12.5.
 # Nibs sit on the notch-facing corner(s) of the three center tabs to catch the
-# base edges (≈±6.6 inner, ±18.4 outer).  'l'=left corner, 'r'=right, 'both'.
+# base edges (≈±6.5 inner, ±18.5 outer).  'l'=left corner, 'r'=right, 'both'.
 NIB_TABS = {1: 'r', 2: 'both', 3: 'l'}
 
 # ── Laser ────────────────────────────────────────────
@@ -282,13 +282,13 @@ class WallRail(Boxes):
 #  Output
 # ════════════════════════════════════════════════════════
 
-def generate(cls, path, burn):
+def generate(cls, path, burn, fmt='pdf'):
     b = cls()
     b.parseArgs([
         f'--thickness={THICKNESS}',
         f'--burn={burn}',
         f'--output={path}',
-        '--format=pdf',
+        f'--format={fmt}',
         '--reference=0',
         '--labels=0',
     ])
@@ -303,11 +303,17 @@ def generate(cls, path, burn):
 
 
 def main():
-    burn = float(sys.argv[1]) if len(sys.argv) > 1 else BURN
+    burn = BURN
+    fmt = 'pdf'
+    for arg in sys.argv[1:]:
+        try:
+            burn = float(arg)
+        except ValueError:
+            fmt = arg
     out = Path('.')
-    print(f'Generating hex tile box PDFs (burn={burn} mm):')
-    generate(HexTop, out / 'hex_top.pdf', burn)
-    generate(WallRail, out / 'wall_rail.pdf', burn)
+    print(f'Generating hex tile box {fmt.upper()}s (burn={burn} mm):')
+    generate(HexTop, out / f'hex_top.{fmt}', burn, fmt)
+    generate(WallRail, out / f'wall_rail.{fmt}', burn, fmt)
     print('Done.')
 
 
