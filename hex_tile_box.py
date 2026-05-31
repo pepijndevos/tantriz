@@ -40,14 +40,14 @@ NOTCH_H = 8.0            # mm cable notch height
 
 # ── Track registration brackets ──────────────────────
 TRACK_BASE_W = 11.8      # mm Märklin Z track base width (verify by caliper)
-BRACKET_FINGER = 13.0    # mm rail-edge tab width
-BRACKET_SPACE = 12.0     # mm rail-edge notch width (receives the track base)
+BRACKET_FINGER = 13.2    # mm rail-edge tab width (25.0 − TRACK_BASE_W)
+BRACKET_SPACE = 11.8     # mm rail-edge notch width (= TRACK_BASE_W)
 NIB_W = 2.0              # mm rail-catch nib width
 NIB_H = 1.0              # mm rail-catch nib height (protrudes above deck)
 # On a hex edge the bracket joint yields 5 tabs (indices 0..4) at rel-midpoint
 # -50/-25/0/+25/+50 mm; the two rail bases drop into the notches at ±12.5.
 # Nibs sit on the notch-facing corner(s) of the three center tabs to catch the
-# base edges (≈±6.5 inner, ±18.5 outer).  'l'=left corner, 'r'=right, 'both'.
+# base edges (≈±6.6 inner, ±18.4 outer).  'l'=left corner, 'r'=right, 'both'.
 NIB_TABS = {1: 'r', 2: 'both', 3: 'l'}
 
 # ── Laser ────────────────────────────────────────────
